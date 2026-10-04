@@ -408,7 +408,7 @@
     frameGroup.position.set(
       museumWall.x,
       1.45,
-      museumWall.z + CELL_SIZE / 2 + 0.16
+      museumWall.z + CELL_SIZE / 2 + 0.025
     );
     scene.add(frameGroup);
 
@@ -423,16 +423,16 @@
     });
 
     const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(2.8, 2.15, 0.14),
+      new THREE.BoxGeometry(0.92, 0.70, 0.10),
       frameMaterial
     );
 
     const artwork = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.42, 1.77),
+      new THREE.PlaneGeometry(0.76, 0.55),
       artworkMaterial
     );
 
-    artwork.position.z = 0.03;
+    artwork.position.z = 0.056;
     artwork.userData.museum = museumData;
 
     frameGroup.add(frame);
@@ -447,20 +447,20 @@
     labelContext.fillStyle = '#101c2d';
     labelContext.fillRect(0, 0, 512, 128);
     labelContext.fillStyle = '#ffffff';
-    labelContext.font = 'bold 28px Arial';
-    labelContext.fillText('PIEZA DE PRUEBA', 24, 48);
-    labelContext.font = '20px Arial';
+    labelContext.font = 'bold 22px Arial';
+    labelContext.fillText('PIEZA DE PRUEBA', 20, 48);
+    labelContext.font = '16px Arial';
     labelContext.fillStyle = '#58d6ff';
-    labelContext.fillText('BUILD 002 · MUSEO VR', 24, 88);
+    labelContext.fillText('BUILD 002 · MUSEO VR', 20, 88);
 
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
 
     const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.35, 0.58),
+      new THREE.PlaneGeometry(0.92, 0.23),
       new THREE.MeshBasicMaterial({ map: labelTexture })
     );
 
-    label.position.set(0, -1.42, 0.05);
+    label.position.set(0, -0.52, 0.056);
     frameGroup.add(label);
 
     function showMuseumPanel(data) {
