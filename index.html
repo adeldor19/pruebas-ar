@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VR Tech Lab · Misión 01</title>
+  <title>VR Tech Lab · Misión 01 · v0.4</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 
@@ -31,7 +31,7 @@
       min-width: 180px;
     }
 
-    #hud strong { color: #ff7a45; }
+    #hud strong { color: #ff7a45; }\n\n    #version {\n      position: fixed;\n      right: 18px;\n      top: 18px;\n      z-index: 20;\n      padding: 7px 10px;\n      border-radius: 10px;\n      background: rgba(7, 17, 31, .72);\n      border: 1px solid rgba(255,255,255,.15);\n      color: #d8e1ec;\n      font-size: 12px;\n      letter-spacing: .5px;\n    }
 
     #instructions,
     #question,
@@ -125,7 +125,7 @@
     </div>
   </div>
 
-  <div id="hud">
+  <div id="version">VR TECH LAB · v0.4 · COLISIONES</div>\n\n  <div id="hud">
     <div>🎯 Puntos: <strong id="score">0</strong></div>
     <div>🔎 Encontrados: <strong id="found">0/3</strong></div>
   </div>
@@ -232,16 +232,13 @@
     let completed = [false, false, false];
 
     /*
-      Sistema de colisiones.
-      En lugar de esperar a que el jugador se meta dentro de un objeto,
-      comprobamos el movimiento realizado en cada eje y anulamos solamente
-      el eje que provoca la colisión. Esto permite "deslizarse" alrededor
-      de la mesa y de los dispositivos.
+      COLISIONES v0.4
+      Usamos "swept collision": dividimos cada desplazamiento en pequeños
+      pasos. Así evitamos que el jugador atraviese una mesa/objeto de un
+      salto cuando WASD mueve demasiado rápido entre dos frames.
     */
     AFRAME.registerComponent("collision-guard", {
-      schema: {
-        radius: { type: "number", default: 0.42 }
-      },
+      schema: { radius: { type: "number", default: 0.42 } },
 
       init: function () {
         this.lastSafe = this.el.object3D.position.clone();
@@ -259,12 +256,8 @@
       collides: function (x, z) {
         const r = this.data.radius;
 
-        if (
-          x < -8.45 + r || x > 8.45 - r ||
-          z < -6.45 + r || z > 6.45 - r
-        ) {
-          return true;
-        }
+        if (x < -8.45 + r || x > 8.45 - r ||
+            z < -6.45 + r || z > 6.45 - r) return true;
 
         for (const o of this.obstacles) {
           if (!o.active()) continue;
@@ -274,9 +267,7 @@
           const dx = x - closestX;
           const dz = z - closestZ;
 
-          if ((dx * dx + dz * dz) < r * r) {
-            return true;
-          }
+          if ((dx * dx + dz * dz) < r * r) return true;
         }
 
         return false;
@@ -284,37 +275,41 @@
 
       tick: function () {
         const p = this.el.object3D.position;
-        const currentX = p.x;
-        const currentZ = p.z;
 
-        // Si el movimiento actual es válido, guardarlo.
-        if (!this.collides(currentX, currentZ)) {
-          this.lastSafe.copy(p);
-          p.y = 0;
-          return;
+        // El movimiento que WASD acaba de producir.
+        const targetX = p.x;
+        const targetZ = p.z;
+
+        const startX = this.lastSafe.x;
+        const startZ = this.lastSafe.z;
+
+        const dx = targetX - startX;
+        const dz = targetZ - startZ;
+        const distance = Math.hypot(dx, dz);
+
+        // Dividir el desplazamiento en pasos de máximo 5 cm.
+        // Esto evita el "tunneling" a través de obstáculos.
+        const steps = Math.max(1, Math.ceil(distance / 0.05));
+
+        let safeX = startX;
+        let safeZ = startZ;
+
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps;
+          const testX = startX + dx * t;
+          const testZ = startZ + dz * t;
+
+          if (this.collides(testX, testZ)) break;
+
+          safeX = testX;
+          safeZ = testZ;
         }
 
-        // Si solo X provoca el choque, bloqueamos X y mantenemos Z.
-        if (!this.collides(this.lastSafe.x, currentZ)) {
-          p.x = this.lastSafe.x;
-          p.y = 0;
-          this.lastSafe.copy(p);
-          return;
-        }
-
-        // Si solo Z provoca el choque, bloqueamos Z y mantenemos X.
-        if (!this.collides(currentX, this.lastSafe.z)) {
-          p.z = this.lastSafe.z;
-          p.y = 0;
-          this.lastSafe.copy(p);
-          return;
-        }
-
-        // Si el movimiento diagonal entra completamente en el obstáculo,
-        // volvemos a la última posición segura.
-        p.x = this.lastSafe.x;
-        p.z = this.lastSafe.z;
+        p.x = safeX;
+        p.z = safeZ;
         p.y = 0;
+
+        this.lastSafe.set(safeX, 0, safeZ);
       }
     });
 
