@@ -136,6 +136,9 @@
         Ordenador: utiliza el ratón para mirar y WASD para moverte.<br>
         VR: entra mediante el botón de realidad virtual.
       </p>
+      <p class="small">
+        🧱 No puedes atravesar paredes, mesa ni dispositivos.
+      </p>
       <button onclick="startGame()">🚀 COMENZAR MISIÓN</button>
     </div>
   </div>
@@ -270,7 +273,10 @@
 
     <!-- Cámara + controles -->
     <a-entity id="rig" position="0 0 5">
-      <a-camera position="0 1.6 0">
+      <a-camera
+        position="0 1.6 0"
+        wasd-controls="acceleration: 18; fly: false"
+        collision-guard>
         <a-cursor
           raycaster="objects: .clickable"
           fuse="true"
@@ -286,6 +292,58 @@
   </a-scene>
 
   <script>
+    // Estado compartido con el sistema de colisiones.
+    let completed = [false, false, false];
+
+    // Colisiones básicas para paredes, mesa y dispositivos.
+    AFRAME.registerComponent("collision-guard", {
+      schema: { radius: { type: "number", default: 0.30 } },
+
+      init: function () {
+        this.lastValid = this.el.object3D.position.clone();
+        this.obstacles = [
+          { minX: -2.5, maxX: 2.5, minZ: -2.0, maxZ: 0.0, active: () => true },
+          { minX: -4.95, maxX: -3.05, minZ: -3.65, maxZ: -2.35, active: () => !completed[0] },
+          { minX: 3.15, maxX: 4.85, minZ: -4.45, maxZ: -3.55, active: () => !completed[1] },
+          { minX: 2.15, maxX: 3.85, minZ: 1.95, maxZ: 3.05, active: () => !completed[2] }
+        ];
+      },
+
+      tick: function () {
+        const p = this.el.object3D.position;
+        const r = this.data.radius;
+
+        // Mantener al jugador dentro de la sala.
+        if (
+          p.x < -8.45 + r || p.x > 8.45 - r ||
+          p.z < -6.45 + r || p.z > 6.45 - r
+        ) {
+          p.x = this.lastValid.x;
+          p.z = this.lastValid.z;
+          return;
+        }
+
+        // Bloquear el paso a través de obstáculos.
+        for (const o of this.obstacles) {
+          if (!o.active()) continue;
+
+          const closestX = Math.max(o.minX, Math.min(p.x, o.maxX));
+          const closestZ = Math.max(o.minZ, Math.min(p.z, o.maxZ));
+          const dx = p.x - closestX;
+          const dz = p.z - closestZ;
+
+          if ((dx * dx + dz * dz) < r * r) {
+            p.x = this.lastValid.x;
+            p.z = this.lastValid.z;
+            return;
+          }
+        }
+
+        this.lastValid.copy(p);
+        p.y = 1.6;
+      }
+    });
+
     const challenges = [
       {
         title: "RETO 01 · ARDUINO",
@@ -321,7 +379,6 @@
 
     let score = 0;
     let found = 0;
-    let completed = [false, false, false];
 
     function startGame() {
       document.getElementById("instructions").style.display = "none";
