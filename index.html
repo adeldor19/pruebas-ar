@@ -3,22 +3,167 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VR Tech Lab · Misión 01 · BUILD 009</title>
+  <title>VR Tech Lab · Misión 01 · BUILD 010 · GRID COLLISIONS</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script>
-    // MOVIMIENTO + COLISIONES BUILD 009
+    // MOVIMIENTO + COLISIONES GRID · BUILD 010
+    // Basado en el sistema de colisiones del juego-laberinto de referencia:
+    // una rejilla lógica determina qué zonas del mundo están libres (# = bloqueado).
     let completed = [false, false, false];
+
+    const GRID_W = 16;
+    const GRID_H = 12;
+    const CELL_SIZE = 1;
+    const ROOM_MIN_X = -8;
+    const ROOM_MIN_Z = -6;
+    const PLAYER_RADIUS = 0.38;
+
+    // La sala física sigue siendo la misma, pero su "mapa invisible"
+    // es el que decide por dónde puede caminar el jugador.
+    const collisionGrid = Array.from(
+      { length: GRID_H },
+      () => Array(GRID_W).fill(".")
+    );
+
+    function worldToGrid(x, z) {
+      return {
+        gx: Math.floor((x - ROOM_MIN_X) / CELL_SIZE),
+        gy: Math.floor((z - ROOM_MIN_Z) / CELL_SIZE)
+      };
+    }
+
+    function gridToWorld(gx, gy) {
+      return {
+        x: ROOM_MIN_X + gx * CELL_SIZE + CELL_SIZE / 2,
+        z: ROOM_MIN_Z + gy * CELL_SIZE + CELL_SIZE / 2
+      };
+    }
+
+    function setBlockedRect(minX, maxX, minZ, maxZ) {
+      for (let gy = 0; gy < GRID_H; gy++) {
+        for (let gx = 0; gx < GRID_W; gx++) {
+          const p = gridToWorld(gx, gy);
+          if (
+            p.x >= minX && p.x <= maxX &&
+            p.z >= minZ && p.z <= maxZ
+          ) {
+            collisionGrid[gy][gx] = "#";
+          }
+        }
+      }
+    }
+
+    function buildCollisionGrid() {
+      // Paredes perimetrales.
+      for (let gx = 0; gx < GRID_W; gx++) {
+        collisionGrid[0][gx] = "#";
+        collisionGrid[GRID_H - 1][gx] = "#";
+      }
+
+      for (let gy = 0; gy < GRID_H; gy++) {
+        collisionGrid[gy][0] = "#";
+        collisionGrid[gy][GRID_W - 1] = "#";
+      }
+
+      // Mesa central.
+      setBlockedRect(-2.5, 2.5, -2, 0);
+
+      // Los tres dispositivos ocupan también celdas del mapa.
+      setBlockedRect(-4.9, -3.1, -3.6, -2.4);
+      setBlockedRect(3.3, 4.7, -4.4, -3.6);
+      setBlockedRect(2.3, 3.7, 1.95, 3.05);
+
+      // Decoración trasera.
+      setBlockedRect(-7, -5, -6, -5.7);
+      setBlockedRect(5, 7, -6, -5.7);
+    }
+
+    buildCollisionGrid();
+
+    function isFree(x, z, radius = PLAYER_RADIUS) {
+      const { gx, gy } = worldToGrid(x, z);
+
+      // Igual que en el juego de referencia: comprobamos la celda
+      // donde estamos y las inmediatamente adyacentes.
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const cx = gx + ox;
+          const cy = gy + oy;
+
+          if (cx < 0 || cy < 0 || cx >= GRID_W || cy >= GRID_H) {
+            return false;
+          }
+
+          if (collisionGrid[cy][cx] !== "#") continue;
+
+          const w = gridToWorld(cx, cy);
+          const half = CELL_SIZE / 2;
+
+          const closestX = Math.max(
+            w.x - half,
+            Math.min(x, w.x + half)
+          );
+
+          const closestZ = Math.max(
+            w.z - half,
+            Math.min(z, w.z + half)
+          );
+
+          const dx = x - closestX;
+          const dz = z - closestZ;
+
+          if (dx * dx + dz * dz < radius * radius) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }
+
+    function tryMove(pos, dx, dz, radius = PLAYER_RADIUS) {
+      // Movimiento separado por ejes:
+      // permite deslizarse junto a una pared u objeto.
+      if (isFree(pos.x + dx, pos.z, radius)) {
+        pos.x += dx;
+      }
+
+      if (isFree(pos.x, pos.z + dz, radius)) {
+        pos.z += dz;
+      }
+    }
+
+    function freeDeviceCells(index) {
+      const rectangles = [
+        [-4.9, -3.1, -3.6, -2.4],
+        [3.3, 4.7, -4.4, -3.6],
+        [2.3, 3.7, 1.95, 3.05]
+      ];
+
+      const [minX, maxX, minZ, maxZ] = rectangles[index];
+
+      for (let gy = 0; gy < GRID_H; gy++) {
+        for (let gx = 0; gx < GRID_W; gx++) {
+          const p = gridToWorld(gx, gy);
+          if (
+            p.x >= minX && p.x <= maxX &&
+            p.z >= minZ && p.z <= maxZ
+          ) {
+            collisionGrid[gy][gx] = ".";
+          }
+        }
+      }
+    }
 
     AFRAME.registerComponent("desktop-collision-controls", {
       schema: {
         speed: { type: "number", default: 3.5 },
-        radius: { type: "number", default: 0.45 }
+        radius: { type: "number", default: PLAYER_RADIUS }
       },
 
       init: function () {
         this.keys = {};
-        this.obstacleEls = [];
 
         window.addEventListener("keydown", e => {
           this.keys[e.key.toLowerCase()] = true;
@@ -27,95 +172,65 @@
         window.addEventListener("keyup", e => {
           this.keys[e.key.toLowerCase()] = false;
         });
-
-        // Esperar a que A-Frame haya creado toda la geometría.
-        this.el.sceneEl.addEventListener("loaded", () => this.setupObstacles());
-      },
-
-      setupObstacles: function () {
-        this.obstacleEls = [
-          this.el.sceneEl.querySelector("#table"),
-          this.el.sceneEl.querySelector("#device1"),
-          this.el.sceneEl.querySelector("#device2"),
-          this.el.sceneEl.querySelector("#device3"),
-          this.el.sceneEl.querySelector("#decor1"),
-          this.el.sceneEl.querySelector("#decor2")
-        ].filter(Boolean);
-      },
-
-      isInsideRoom: function (x, z) {
-        return x >= -8.0 && x <= 8.0 && z >= -6.0 && z <= 6.0;
-      },
-
-      collidesWithObjects: function (x, z) {
-        const r = this.data.radius;
-        const point = new THREE.Vector3(x, 0.9, z);
-
-        for (let i = 0; i < this.obstacleEls.length; i++) {
-          const el = this.obstacleEls[i];
-
-          if (i >= 1 && i <= 3 && completed[i - 1]) continue;
-          if (!el.object3D.visible) continue;
-
-          const box = new THREE.Box3().setFromObject(el.object3D);
-          box.expandByScalar(r);
-
-          if (box.containsPoint(point)) return true;
-        }
-
-        return false;
-      },
-
-      blocked: function (x, z) {
-        return !this.isInsideRoom(x, z) || this.collidesWithObjects(x, z);
       },
 
       tick: function (time, delta) {
         if (!delta) return;
 
-        let mx = 0;
-        let mz = 0;
+        const camera = this.el.sceneEl.camera;
+        const pos = this.el.object3D.position;
 
-        if (this.keys["w"] || this.keys["arrowup"]) mz -= 1;
-        if (this.keys["s"] || this.keys["arrowdown"]) mz += 1;
-        if (this.keys["a"] || this.keys["arrowleft"]) mx -= 1;
-        if (this.keys["d"] || this.keys["arrowright"]) mx += 1;
+        let forwardInput = 0;
+        let rightInput = 0;
 
-        const p = this.el.object3D.position;
+        if (this.keys["w"] || this.keys["arrowup"]) forwardInput += 1;
+        if (this.keys["s"] || this.keys["arrowdown"]) forwardInput -= 1;
+        if (this.keys["a"] || this.keys["arrowleft"]) rightInput -= 1;
+        if (this.keys["d"] || this.keys["arrowright"]) rightInput += 1;
 
-        if (mx || mz) {
-          const len = Math.hypot(mx, mz);
-          mx /= len;
-          mz /= len;
+        if (forwardInput || rightInput) {
+          const forward = new THREE.Vector3();
+          camera.getWorldDirection(forward);
+          forward.y = 0;
+          forward.normalize();
 
-          const step = this.data.speed * Math.min(delta / 1000, 0.04);
+          const right = new THREE.Vector3(
+            forward.z,
+            0,
+            -forward.x
+          );
 
-          // Movimiento por ejes: permite deslizarse alrededor de objetos.
-          const candidateX = p.x + mx * step;
-          if (!this.blocked(candidateX, p.z)) {
-            p.x = candidateX;
-          }
+          const length = Math.hypot(forwardInput, rightInput);
+          forwardInput /= length;
+          rightInput /= length;
 
-          const candidateZ = p.z + mz * step;
-          if (!this.blocked(p.x, candidateZ)) {
-            p.z = candidateZ;
-          }
+          const speed = this.data.speed * Math.min(delta / 1000, 0.04);
+
+          const dx =
+            (forward.x * forwardInput + right.x * rightInput) * speed;
+
+          const dz =
+            (forward.z * forwardInput + right.z * rightInput) * speed;
+
+          tryMove(pos, dx, dz, this.data.radius);
         }
 
-        // Seguridad absoluta: nunca fuera de la sala.
-        p.x = Math.max(-8, Math.min(8, p.x));
-        p.z = Math.max(-6, Math.min(6, p.z));
-        p.y = 0;
+        pos.y = 0;
 
-        const pos = document.getElementById("playerPosition");
+        const hudPos = document.getElementById("playerPosition");
         const state = document.getElementById("collisionState");
 
-        if (pos) pos.textContent = `X: ${p.x.toFixed(1)} · Z: ${p.z.toFixed(1)}`;
-        if (state) state.textContent = "🧱 COLISIONES: ON";
+        if (hudPos) {
+          hudPos.textContent =
+            `X: ${pos.x.toFixed(1)} · Z: ${pos.z.toFixed(1)}`;
+        }
+
+        if (state) {
+          state.textContent = "🧱 COLISIONES GRID: ON";
+        }
       }
     });
 
-  </script>
 
 
 
@@ -237,7 +352,7 @@
     </div>
   </div>
 
-  <div id="version">VR TECH LAB · BUILD 009</div>\n\n  <div id="hud">
+  <div id="version">VR TECH LAB · BUILD 010 · GRID COLLISIONS</div>\n\n  <div id="hud">
     <div>🎯 Puntos: <strong id="score">0</strong></div>
     <div>🔎 Encontrados: <strong id="found">0/3</strong></div>\n    <div class="small" id="playerPosition">X: 0.0 · Z: 5.0</div>\n    <div class="small" id="collisionState">🧱 COLISIONES: INICIANDO</div>
   </div>
@@ -283,7 +398,7 @@
     <a-box id="table" position="0 1 -1" width="5" height="2" depth="2" color="#263f58"></a-box>
 
     <a-text value="VR TECH LAB" position="-3.4 3.7 -6.8" color="#ff7a45" width="7" align="center"></a-text>
-    <a-text value="BUILD 009 · COLISIONES 3D ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
+    <a-text value="BUILD 010 · GRID COLLISIONS · COLISIONES 3D ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
 
     <a-entity id="device1" class="clickable"
       position="-4 1.35 -3"
