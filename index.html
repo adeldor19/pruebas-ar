@@ -272,11 +272,12 @@
     <a-box position="6 1.2 -6.5" width="2" height="2.4" depth=".5" color="#1b344e"></a-box>
 
     <!-- Cámara + controles -->
-    <a-entity id="rig" position="0 0 5">
-      <a-camera
-        position="0 1.6 0"
-        wasd-controls="acceleration: 18; fly: false"
-        collision-guard>
+    <a-entity
+      id="rig"
+      position="0 0 5"
+      wasd-controls="acceleration: 18; fly: false"
+      collision-guard>
+      <a-camera position="0 1.6 0">
         <a-cursor
           raycaster="objects: .clickable"
           fuse="true"
@@ -340,7 +341,7 @@
         }
 
         this.lastValid.copy(p);
-        p.y = 1.6;
+        p.y = 0;
       }
     });
 
