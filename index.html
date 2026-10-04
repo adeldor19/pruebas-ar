@@ -268,9 +268,11 @@
       metalness: 0.02
     });
 
+    const WALL_HEIGHT = 3.6;
+
     const wallGeometry = new THREE.BoxGeometry(
       CELL_SIZE,
-      2.4,
+      WALL_HEIGHT,
       CELL_SIZE
     );
 
@@ -303,7 +305,11 @@
           isOuterWall ? wallMaterial : obstacleMaterial
         );
 
-        mesh.position.set(p.x, isOuterWall ? 1.2 : 0.9, p.z);
+        mesh.position.set(
+          p.x,
+          isOuterWall ? WALL_HEIGHT / 2 : 0.9,
+          p.z
+        );
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         scene.add(mesh);
@@ -401,8 +407,8 @@
     const museumWall = gridToWorld(3, 2);
     frameGroup.position.set(
       museumWall.x,
-      1.65,
-      museumWall.z + CELL_SIZE / 2 + 0.08
+      1.45,
+      museumWall.z + CELL_SIZE / 2 + 0.16
     );
     scene.add(frameGroup);
 
@@ -426,7 +432,7 @@
       artworkMaterial
     );
 
-    artwork.position.z = -0.08;
+    artwork.position.z = 0.03;
     artwork.userData.museum = museumData;
 
     frameGroup.add(frame);
@@ -454,7 +460,7 @@
       new THREE.MeshBasicMaterial({ map: labelTexture })
     );
 
-    label.position.set(0, -1.42, -0.09);
+    label.position.set(0, -1.42, 0.05);
     frameGroup.add(label);
 
     function showMuseumPanel(data) {
