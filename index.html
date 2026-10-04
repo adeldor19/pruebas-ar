@@ -3,51 +3,71 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VR Tech Lab · Misión 01 · BUILD 006</title>
+  <title>VR Tech Lab · Misión 01 · BUILD 009</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script>
-    // MOVIMIENTO + COLISIONES BUILD 008
+    // MOVIMIENTO + COLISIONES BUILD 009
     let completed = [false, false, false];
 
     AFRAME.registerComponent("desktop-collision-controls", {
-      schema: { speed: { type: "number", default: 3.5 }, radius: { type: "number", default: 0.45 } },
+      schema: {
+        speed: { type: "number", default: 3.5 },
+        radius: { type: "number", default: 0.45 }
+      },
 
       init: function () {
         this.keys = {};
-        this.obstacles = [
-          [-2.5, 2.5, -2.0, 0.0],
-          [-4.95, -3.05, -3.65, -2.35],
-          [3.15, 4.85, -4.45, -3.55],
-          [2.15, 3.85, 1.95, 3.05],
-          [-7.0, -5.0, -6.75, -6.25],
-          [5.0, 7.0, -6.75, -6.25]
-        ];
-        window.addEventListener("keydown", e => { this.keys[e.key.toLowerCase()] = true; });
-        window.addEventListener("keyup", e => { this.keys[e.key.toLowerCase()] = false; });
+        this.obstacleEls = [];
+
+        window.addEventListener("keydown", e => {
+          this.keys[e.key.toLowerCase()] = true;
+        });
+
+        window.addEventListener("keyup", e => {
+          this.keys[e.key.toLowerCase()] = false;
+        });
+
+        // Esperar a que A-Frame haya creado toda la geometría.
+        this.el.sceneEl.addEventListener("loaded", () => this.setupObstacles());
       },
 
-      collides: function (x, z) {
+      setupObstacles: function () {
+        this.obstacleEls = [
+          this.el.sceneEl.querySelector("#table"),
+          this.el.sceneEl.querySelector("#device1"),
+          this.el.sceneEl.querySelector("#device2"),
+          this.el.sceneEl.querySelector("#device3"),
+          this.el.sceneEl.querySelector("#decor1"),
+          this.el.sceneEl.querySelector("#decor2")
+        ].filter(Boolean);
+      },
+
+      isInsideRoom: function (x, z) {
+        return x >= -8.0 && x <= 8.0 && z >= -6.0 && z <= 6.0;
+      },
+
+      collidesWithObjects: function (x, z) {
         const r = this.data.radius;
+        const point = new THREE.Vector3(x, 0.9, z);
 
-        // Límites físicos de la habitación.
-        if (x < -8.0 || x > 8.0 || z < -6.0 || z > 6.0) return true;
+        for (let i = 0; i < this.obstacleEls.length; i++) {
+          const el = this.obstacleEls[i];
 
-        for (let i = 0; i < this.obstacles.length; i++) {
-          // Los dispositivos dejan de ser obstáculos al completarlos.
           if (i >= 1 && i <= 3 && completed[i - 1]) continue;
+          if (!el.object3D.visible) continue;
 
-          const o = this.obstacles[i];
+          const box = new THREE.Box3().setFromObject(el.object3D);
+          box.expandByScalar(r);
 
-          if (
-            x > o[0] - r &&
-            x < o[1] + r &&
-            z > o[2] - r &&
-            z < o[3] + r
-          ) return true;
+          if (box.containsPoint(point)) return true;
         }
 
         return false;
+      },
+
+      blocked: function (x, z) {
+        return !this.isInsideRoom(x, z) || this.collidesWithObjects(x, z);
       },
 
       tick: function (time, delta) {
@@ -61,35 +81,37 @@
         if (this.keys["a"] || this.keys["arrowleft"]) mx -= 1;
         if (this.keys["d"] || this.keys["arrowright"]) mx += 1;
 
-        if (!mx && !mz) return;
-
-        const len = Math.hypot(mx, mz);
-        mx /= len;
-        mz /= len;
-
-        // Movimiento sencillo en coordenadas del laboratorio.
-        // Lo hacemos independiente de la cámara para que las colisiones
-        // sean completamente deterministas.
-        const step = this.data.speed * Math.min(delta / 1000, 0.04);
         const p = this.el.object3D.position;
 
-        const oldX = p.x;
-        const oldZ = p.z;
+        if (mx || mz) {
+          const len = Math.hypot(mx, mz);
+          mx /= len;
+          mz /= len;
 
-        // Resolver X y Z por separado permite deslizarse por las paredes.
-        const nextX = oldX + mx * step;
-        if (!this.collides(nextX, oldZ)) p.x = nextX;
+          const step = this.data.speed * Math.min(delta / 1000, 0.04);
 
-        const nextZ = oldZ + mz * step;
-        if (!this.collides(p.x, nextZ)) p.z = nextZ;
+          // Movimiento por ejes: permite deslizarse alrededor de objetos.
+          const candidateX = p.x + mx * step;
+          if (!this.blocked(candidateX, p.z)) {
+            p.x = candidateX;
+          }
 
-        // Seguro adicional: jamás puede salir de estos límites.
-        p.x = Math.max(-8.0, Math.min(8.0, p.x));
-        p.z = Math.max(-6.0, Math.min(6.0, p.z));
+          const candidateZ = p.z + mz * step;
+          if (!this.blocked(p.x, candidateZ)) {
+            p.z = candidateZ;
+          }
+        }
+
+        // Seguridad absoluta: nunca fuera de la sala.
+        p.x = Math.max(-8, Math.min(8, p.x));
+        p.z = Math.max(-6, Math.min(6, p.z));
         p.y = 0;
 
         const pos = document.getElementById("playerPosition");
+        const state = document.getElementById("collisionState");
+
         if (pos) pos.textContent = `X: ${p.x.toFixed(1)} · Z: ${p.z.toFixed(1)}`;
+        if (state) state.textContent = "🧱 COLISIONES: ON";
       }
     });
 
@@ -215,9 +237,9 @@
     </div>
   </div>
 
-  <div id="version">VR TECH LAB · BUILD 008</div>\n\n  <div id="hud">
+  <div id="version">VR TECH LAB · BUILD 009</div>\n\n  <div id="hud">
     <div>🎯 Puntos: <strong id="score">0</strong></div>
-    <div>🔎 Encontrados: <strong id="found">0/3</strong></div>\n    <div class="small" id="playerPosition">X: 0.0 · Z: 5.0</div>
+    <div>🔎 Encontrados: <strong id="found">0/3</strong></div>\n    <div class="small" id="playerPosition">X: 0.0 · Z: 5.0</div>\n    <div class="small" id="collisionState">🧱 COLISIONES: INICIANDO</div>
   </div>
 
   <div id="question">
@@ -258,10 +280,10 @@
     <a-box position="-9 2.5 0" width=".2" height="5" depth="14" color="#10243a"></a-box>
     <a-box position="9 2.5 0" width=".2" height="5" depth="14" color="#10243a"></a-box>
 
-    <a-box position="0 1 -1" width="5" height="2" depth="2" color="#263f58"></a-box>
+    <a-box id="table" position="0 1 -1" width="5" height="2" depth="2" color="#263f58"></a-box>
 
     <a-text value="VR TECH LAB" position="-3.4 3.7 -6.8" color="#ff7a45" width="7" align="center"></a-text>
-    <a-text value="BUILD 008 · COLISIONES ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
+    <a-text value="BUILD 009 · COLISIONES 3D ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
 
     <a-entity id="device1" class="clickable"
       position="-4 1.35 -3"
@@ -295,8 +317,8 @@
       <a-text value="MICRO:BIT" position="-.75 .55 0" color="#ffffff" width="2.2"></a-text>
     </a-entity>
 
-    <a-box position="-6 1.2 -6.5" width="2" height="2.4" depth=".5" color="#1b344e"></a-box>
-    <a-box position="6 1.2 -6.5" width="2" height="2.4" depth=".5" color="#1b344e"></a-box>
+    <a-box id="decor1" position="-6 1.2 -6.5" width="2" height="2.4" depth=".5" color="#1b344e"></a-box>
+    <a-box id="decor2" position="6 1.2 -6.5" width="2" height="2.4" depth=".5" color="#1b344e"></a-box>
 
     <a-entity
       id="rig"
