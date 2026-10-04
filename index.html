@@ -7,89 +7,103 @@
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script>
-    // COLISIONES REGISTRADAS ANTES DE CREAR LA ESCENA
+    // MOVIMIENTO + COLISIONES BUILD 007
     let completed = [false, false, false];
-/*
-  COLISIONES v0.4
-  Usamos "swept collision": dividimos cada desplazamiento en pequeños
-  pasos. Así evitamos que el jugador atraviese una mesa/objeto de un
-  salto cuando WASD mueve demasiado rápido entre dos frames.
-*/
-AFRAME.registerComponent("collision-guard", {
-  schema: { radius: { type: "number", default: 0.42 } },
 
-  init: function () {
-    this.lastSafe = this.el.object3D.position.clone();
+    AFRAME.registerComponent("desktop-collision-controls", {
+      schema: {
+        speed: { type: "number", default: 3.5 },
+        radius: { type: "number", default: 0.42 }
+      },
 
-    this.obstacles = [
-      { minX: -2.5, maxX: 2.5, minZ: -2.0, maxZ: 0.0, active: () => true },
-      { minX: -4.95, maxX: -3.05, minZ: -3.65, maxZ: -2.35, active: () => !completed[0] },
-      { minX: 3.15, maxX: 4.85, minZ: -4.45, maxZ: -3.55, active: () => !completed[1] },
-      { minX: 2.15, maxX: 3.85, minZ: 1.95, maxZ: 3.05, active: () => !completed[2] },
-      { minX: -7.0, maxX: -5.0, minZ: -6.75, maxZ: -6.25, active: () => true },
-      { minX: 5.0, maxX: 7.0, minZ: -6.75, maxZ: -6.25, active: () => true }
-    ];
-  },
+      init: function () {
+        this.keys = {};
+        this.camera = null;
 
-  collides: function (x, z) {
-    const r = this.data.radius;
+        window.addEventListener("keydown", e => {
+          this.keys[e.key.toLowerCase()] = true;
+        });
 
-    if (x < -8.45 + r || x > 8.45 - r ||
-        z < -6.45 + r || z > 6.45 - r) return true;
+        window.addEventListener("keyup", e => {
+          this.keys[e.key.toLowerCase()] = false;
+        });
 
-    for (const o of this.obstacles) {
-      if (!o.active()) continue;
+        this.obstacles = [
+          { minX: -2.5, maxX: 2.5, minZ: -2.0, maxZ: 0.0, active: () => true },
+          { minX: -4.95, maxX: -3.05, minZ: -3.65, maxZ: -2.35, active: () => !completed[0] },
+          { minX: 3.15, maxX: 4.85, minZ: -4.45, maxZ: -3.55, active: () => !completed[1] },
+          { minX: 2.15, maxX: 3.85, minZ: 1.95, maxZ: 3.05, active: () => !completed[2] },
+          { minX: -7.0, maxX: -5.0, minZ: -6.75, maxZ: -6.25, active: () => true },
+          { minX: 5.0, maxX: 7.0, minZ: -6.75, maxZ: -6.25, active: () => true }
+        ];
+      },
 
-      const closestX = Math.max(o.minX, Math.min(x, o.maxX));
-      const closestZ = Math.max(o.minZ, Math.min(z, o.maxZ));
-      const dx = x - closestX;
-      const dz = z - closestZ;
+      play: function () {
+        this.camera = this.el.querySelector("a-camera");
+      },
 
-      if ((dx * dx + dz * dz) < r * r) return true;
-    }
+      collides: function (x, z) {
+        const r = this.data.radius;
 
-    return false;
-  },
+        if (x < -8.45 + r || x > 8.45 - r ||
+            z < -6.45 + r || z > 6.45 - r) return true;
 
-  tick: function () {
-    const p = this.el.object3D.position;
+        for (const o of this.obstacles) {
+          if (!o.active()) continue;
+          const closestX = Math.max(o.minX, Math.min(x, o.maxX));
+          const closestZ = Math.max(o.minZ, Math.min(z, o.maxZ));
+          const dx = x - closestX;
+          const dz = z - closestZ;
+          if (dx * dx + dz * dz < r * r) return true;
+        }
+        return false;
+      },
 
-    // El movimiento que WASD acaba de producir.
-    const targetX = p.x;
-    const targetZ = p.z;
+      tick: function (time, delta) {
+        if (!this.camera || !delta) return;
 
-    const startX = this.lastSafe.x;
-    const startZ = this.lastSafe.z;
+        let x = 0, z = 0;
+        if (this.keys["w"] || this.keys["arrowup"]) z -= 1;
+        if (this.keys["s"] || this.keys["arrowdown"]) z += 1;
+        if (this.keys["a"] || this.keys["arrowleft"]) x -= 1;
+        if (this.keys["d"] || this.keys["arrowright"]) x += 1;
+        if (!x && !z) return;
 
-    const dx = targetX - startX;
-    const dz = targetZ - startZ;
-    const distance = Math.hypot(dx, dz);
+        const length = Math.hypot(x, z);
+        x /= length;
+        z /= length;
 
-    // Dividir el desplazamiento en pasos de máximo 5 cm.
-    // Esto evita el "tunneling" a través de obstáculos.
-    const steps = Math.max(1, Math.ceil(distance / 0.05));
+        const yaw = this.camera.object3D.rotation.y;
+        const speed = this.data.speed * Math.min(delta / 1000, 0.05);
 
-    let safeX = startX;
-    let safeZ = startZ;
+        // Movimiento relativo a la dirección en la que mira la cámara.
+        const dx = (x * Math.cos(yaw) + z * Math.sin(yaw)) * speed;
+        const dz = (-x * Math.sin(yaw) + z * Math.cos(yaw)) * speed;
 
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const testX = startX + dx * t;
-      const testZ = startZ + dz * t;
+        // Comprobar cada pequeño paso para impedir atravesar obstáculos.
+        const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.025));
+        const sx = this.el.object3D.position.x;
+        const sz = this.el.object3D.position.z;
 
-      if (this.collides(testX, testZ)) break;
+        let safeX = sx;
+        let safeZ = sz;
 
-      safeX = testX;
-      safeZ = testZ;
-    }
+        for (let i = 1; i <= steps; i++) {
+          const tx = sx + dx * i / steps;
+          const tz = sz + dz * i / steps;
 
-    p.x = safeX;
-    p.z = safeZ;
-    p.y = 0;
+          if (this.collides(tx, tz)) break;
 
-    this.lastSafe.set(safeX, 0, safeZ);
-  }
-});
+          safeX = tx;
+          safeZ = tz;
+        }
+
+        this.el.object3D.position.x = safeX;
+        this.el.object3D.position.z = safeZ;
+        this.el.object3D.position.y = 0;
+      }
+    });
+
   </script>
 
 
@@ -212,7 +226,7 @@ AFRAME.registerComponent("collision-guard", {
     </div>
   </div>
 
-  <div id="version">VR TECH LAB · BUILD 005</div>\n\n  <div id="hud">
+  <div id="version">VR TECH LAB · BUILD 007</div>\n\n  <div id="hud">
     <div>🎯 Puntos: <strong id="score">0</strong></div>
     <div>🔎 Encontrados: <strong id="found">0/3</strong></div>
   </div>
@@ -258,7 +272,7 @@ AFRAME.registerComponent("collision-guard", {
     <a-box position="0 1 -1" width="5" height="2" depth="2" color="#263f58"></a-box>
 
     <a-text value="VR TECH LAB" position="-3.4 3.7 -6.8" color="#ff7a45" width="7" align="center"></a-text>
-    <a-text value="BUILD 005 · COLISIONES ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
+    <a-text value="BUILD 007 · COLISIONES ACTIVAS" position="-3.5 2.75 -6.8" color="#7de3ff" width="6.5" align="center"></a-text>\n\n    <a-text value="ENCUENTRA LOS 3 DISPOSITIVOS" position="-3.5 3.2 -6.8" color="#ffffff" width="6.5" align="center"></a-text>
 
     <a-entity id="device1" class="clickable"
       position="-4 1.35 -3"
@@ -298,8 +312,7 @@ AFRAME.registerComponent("collision-guard", {
     <a-entity
       id="rig"
       position="0 0 5"
-      wasd-controls="acceleration: 18; fly: false"
-      collision-guard>
+      desktop-collision-controls>
       <a-camera position="0 1.6 0">
         <a-cursor
           raycaster="objects: .clickable"
