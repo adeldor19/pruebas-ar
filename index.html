@@ -59,6 +59,46 @@
       pointer-events: none;
     }
 
+    #museum-panel {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      width: min(520px, calc(100vw - 40px));
+      padding: 22px;
+      color: white;
+      background: rgba(7, 17, 31, .94);
+      border: 1px solid rgba(88, 214, 255, .45);
+      border-radius: 16px;
+      box-shadow: 0 20px 70px rgba(0,0,0,.55);
+      display: none;
+    }
+
+    #museum-panel h2 {
+      margin: 0 0 8px;
+      color: #58d6ff;
+      font-size: 22px;
+    }
+
+    #museum-panel p {
+      margin: 7px 0;
+      color: #dce8f5;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    #museum-close {
+      margin-top: 14px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 9px;
+      background: #58d6ff;
+      color: #07111f;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
     #message {
       position: fixed;
       left: 50%;
@@ -95,6 +135,15 @@
   </div>
 
   <div id="crosshair"></div>
+
+  <div id="museum-panel">
+    <h2 id="museum-title"></h2>
+    <p id="museum-author"></p>
+    <p id="museum-description"></p>
+    <p id="museum-curiosity"></p>
+    <button id="museum-close">Cerrar</button>
+  </div>
+
   <div id="message">Haz clic en la escena para mirar con el ratón</div>
 
   <script type="module">
@@ -331,7 +380,103 @@
     dolly.position.set(start.x, 0, start.z);
 
     // ------------------------------------------------------------
-    // 6. MOVIMIENTO DE PC
+    // 6. CUADRO INTERACTIVO
+    // ------------------------------------------------------------
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    const museumData = {
+      titulo: 'La primera pieza del museo',
+      autor: 'BUILD 002 · Pieza de prueba',
+      descripcion: 'Este cuadro es una prueba del sistema de museo virtual. Al seleccionarlo, el juego muestra información asociada al objeto sin abandonar el entorno 3D.',
+      curiosidad: 'Más adelante cada obra podrá tener su propia imagen, explicación, curiosidades y preguntas.'
+    };
+
+    const frameGroup = new THREE.Group();
+    frameGroup.position.set(0, 1.65, -2.95);
+    scene.add(frameGroup);
+
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb88942,
+      roughness: 0.48,
+      metalness: 0.18
+    });
+
+    const artworkMaterial = new THREE.MeshBasicMaterial({
+      color: 0x315f7d
+    });
+
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(2.8, 2.15, 0.14),
+      frameMaterial
+    );
+
+    const artwork = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.42, 1.77),
+      artworkMaterial
+    );
+
+    artwork.position.z = -0.08;
+    artwork.userData.museum = museumData;
+
+    frameGroup.add(frame);
+    frameGroup.add(artwork);
+
+    // Cartela bajo el cuadro.
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 512;
+    labelCanvas.height = 128;
+
+    const labelContext = labelCanvas.getContext('2d');
+    labelContext.fillStyle = '#101c2d';
+    labelContext.fillRect(0, 0, 512, 128);
+    labelContext.fillStyle = '#ffffff';
+    labelContext.font = 'bold 28px Arial';
+    labelContext.fillText('PIEZA DE PRUEBA', 24, 48);
+    labelContext.font = '20px Arial';
+    labelContext.fillStyle = '#58d6ff';
+    labelContext.fillText('BUILD 002 · MUSEO VR', 24, 88);
+
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.35, 0.58),
+      new THREE.MeshBasicMaterial({ map: labelTexture })
+    );
+
+    label.position.set(0, -1.42, -0.09);
+    frameGroup.add(label);
+
+    function showMuseumPanel(data) {
+      document.getElementById('museum-title').textContent = data.titulo;
+      document.getElementById('museum-author').textContent = data.autor;
+      document.getElementById('museum-description').textContent = data.descripcion;
+      document.getElementById('museum-curiosity').textContent = data.curiosidad;
+      document.getElementById('museum-panel').style.display = 'block';
+    }
+
+    document.getElementById('museum-close').addEventListener('click', () => {
+      document.getElementById('museum-panel').style.display = 'none';
+    });
+
+    renderer.domElement.addEventListener('pointerdown', (event) => {
+      if (renderer.xr.isPresenting) return;
+
+      pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+
+      const hits = raycaster.intersectObject(artwork, false);
+
+      if (hits.length > 0 && artwork.userData.museum) {
+        showMuseumPanel(artwork.userData.museum);
+      }
+    });
+
+    // ------------------------------------------------------------
+    // 7. MOVIMIENTO DE PC
     // ------------------------------------------------------------
 
     const keys = new Set();
@@ -416,7 +561,7 @@
     }
 
     // ------------------------------------------------------------
-    // 7. CONTROLES VR
+    // 8. CONTROLES VR
     //
     // El joystick izquierdo mueve el dolly.
     // El derecho gira al jugador.
@@ -512,7 +657,31 @@
     }
 
     // ------------------------------------------------------------
-    // 8. RESIZE
+    // 9. INTERACCIÓN VR DEL CUADRO
+    // ------------------------------------------------------------
+
+    const vrRaycaster = new THREE.Raycaster();
+
+    controllers.forEach((controller) => {
+      controller.addEventListener('selectstart', () => {
+        const origin = new THREE.Vector3();
+        const direction = new THREE.Vector3(0, 0, -1);
+
+        controller.getWorldPosition(origin);
+        direction.applyQuaternion(controller.getWorldQuaternion(new THREE.Quaternion()));
+
+        vrRaycaster.set(origin, direction);
+
+        const hits = vrRaycaster.intersectObject(artwork, false);
+
+        if (hits.length > 0 && artwork.userData.museum) {
+          showMuseumPanel(artwork.userData.museum);
+        }
+      });
+    });
+
+    // ------------------------------------------------------------
+    // 10. RESIZE
     // ------------------------------------------------------------
 
     window.addEventListener('resize', () => {
@@ -522,7 +691,7 @@
     });
 
     // ------------------------------------------------------------
-    // 9. BUCLE PRINCIPAL
+    // 11. BUCLE PRINCIPAL
     // ------------------------------------------------------------
 
     function render() {
