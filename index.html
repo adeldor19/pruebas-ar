@@ -519,6 +519,9 @@
             completed[index] = true;
             found++;
 
+            // Al superar el reto, liberamos las celdas que ocupaba el dispositivo.
+            freeDeviceCells(index);
+
             document.getElementById("score").textContent = score;
             document.getElementById("found").textContent = found + "/3";
 
