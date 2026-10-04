@@ -457,17 +457,17 @@
     function updateVRMovement() {
       if (!renderer.xr.isPresenting) return;
 
-      const left = controllerStates[0].inputSource;
-      const right = controllerStates[1].inputSource;
+      // No damos por hecho que el mando izquierdo sea el índice 0.
+      // Buscamos cada mando por handedness, porque el orden puede variar.
+      const inputSources = controllerStates
+        .map(state => state.inputSource)
+        .filter(Boolean);
 
-      // Algunos visores pueden devolver los mandos en distinto orden.
-      const leftGamepad = left && left.handedness === 'left'
-        ? left.gamepad
-        : null;
+      const left = inputSources.find(source => source.handedness === 'left');
+      const right = inputSources.find(source => source.handedness === 'right');
 
-      const rightGamepad = right && right.handedness === 'right'
-        ? right.gamepad
-        : null;
+      const leftGamepad = left?.gamepad ?? null;
+      const rightGamepad = right?.gamepad ?? null;
 
       if (leftGamepad && leftGamepad.axes.length >= 4) {
         const x = leftGamepad.axes[2] ?? leftGamepad.axes[0] ?? 0;
