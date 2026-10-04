@@ -394,7 +394,16 @@
     };
 
     const frameGroup = new THREE.Group();
-    frameGroup.position.set(0, 1.65, -2.95);
+
+    // El cuadro se coloca sobre la cara libre de una pared real de la grid.
+    // Celda de pared: gx=3, gy=2. La celda inferior (gx=3, gy=3)
+    // está libre, así que el cuadro mira hacia el pasillo.
+    const museumWall = gridToWorld(3, 2);
+    frameGroup.position.set(
+      museumWall.x,
+      1.65,
+      museumWall.z + CELL_SIZE / 2 + 0.08
+    );
     scene.add(frameGroup);
 
     const frameMaterial = new THREE.MeshStandardMaterial({
